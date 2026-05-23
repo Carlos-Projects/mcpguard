@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Env
+.env
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project
+mcpguard_logs/
+*.log
+*.jsonl
+
+# Test
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Config with secrets (template is fine, actual values should not be committed)
+# mcpguard.yaml may contain api_key - keep it out

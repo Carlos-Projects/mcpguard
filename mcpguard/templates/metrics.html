@@ -1,0 +1,34 @@
+<div id="metrics" class="grid">
+  <div class="card">
+    <div class="value">{{ total_requests }}</div>
+    <div class="label">Total Requests</div>
+  </div>
+  <div class="card">
+    <div class="value">{{ sse_connections }}</div>
+    <div class="label">SSE Connections</div>
+  </div>
+  <div class="card danger">
+    <div class="value">{{ blocked }}</div>
+    <div class="label">Blocked</div>
+  </div>
+  <div class="card danger">
+    <div class="value">{{ injections }}</div>
+    <div class="label">Injections</div>
+  </div>
+  <div class="card warning">
+    <div class="value">{{ poisonings }}</div>
+    <div class="label">Poisoning</div>
+  </div>
+  <div class="card">
+    <div class="value">{{ anomalies }}</div>
+    <div class="label">Anomalies</div>
+  </div>
+  <div class="card success">
+    <div class="value">{{ uptime }}s</div>
+    <div class="label">Uptime</div>
+  </div>
+  <div class="card">
+    <div class="value">{{ active_rules }}</div>
+    <div class="label">Active Rules</div>
+  </div>
+</div>

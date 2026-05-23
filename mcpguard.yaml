@@ -1,0 +1,48 @@
+# MCPGuard Configuration
+mode: http
+listen_host: 127.0.0.1
+listen_port: 8080
+target_url: http://localhost:8000
+sse_path: /sse
+messages_path: /messages/
+
+# Stdio mode
+# mode: stdio
+# command:
+#   - python3
+#   - /path/to/mcp_server.py
+
+# Security rules
+allow:
+  - get_weather
+  - search_web
+  - read_file
+  - write_file
+deny:
+  - exec
+  - shell
+  - bash
+  - sudo
+  - delete_
+  - drop_
+
+# Rate limiting
+rate_limit: 100
+rate_window: 60
+
+# Blocking
+block_on_injection: true
+block_on_poisoning: false
+
+# Auth (optional)
+# api_key: your-secret-key
+
+# TLS (optional)
+# tls_cert_path: /path/to/cert.pem
+# tls_key_path: /path/to/key.pem
+
+# Hot-reload config
+# hot_reload: true
+
+# Logging
+log_dir: ./mcpguard_logs

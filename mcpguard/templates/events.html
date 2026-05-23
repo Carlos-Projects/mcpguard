@@ -1,0 +1,19 @@
+<table>
+  <thead>
+    <tr><th>Time</th><th>Type</th><th>Severity</th><th>Message</th><th>Blocked</th></tr>
+  </thead>
+  <tbody>
+    {% for ev in events %}
+    <tr>
+      <td>{{ ev.timestamp.strftime('%H:%M:%S') if ev.timestamp is defined else ev.timestamp[:19] }}</td>
+      <td>{{ ev.event_type }}</td>
+      <td><span class="badge {{ ev.severity }}">{{ ev.severity }}</span></td>
+      <td>{{ ev.message[:80] }}</td>
+      <td>{{ 'YES' if ev.blocked else 'no' }}</td>
+    </tr>
+    {% endfor %}
+    {% if not events %}
+    <tr><td colspan="5" style="color: #64748b; text-align: center; padding: 20px;">No security events recorded yet</td></tr>
+    {% endif %}
+  </tbody>
+</table>
