@@ -36,6 +36,7 @@ def proxy(
 ) -> None:
     if config_file:
         config = ProxyConfig.from_file(config_file)
+        config.config_path = config_file.resolve()
         rprint(f"[dim]Loaded config from[/dim] [yellow]{config_file}[/yellow]")
     else:
         config = ProxyConfig(

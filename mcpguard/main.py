@@ -50,6 +50,7 @@ class ProxyConfig:
     tls_cert_path: Path | None = None
     tls_key_path: Path | None = None
     hot_reload: bool = False
+    config_path: Path | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProxyConfig:
@@ -75,6 +76,7 @@ class ProxyConfig:
             tls_cert_path=Path(data["tls_cert_path"]) if data.get("tls_cert_path") else None,
             tls_key_path=Path(data["tls_key_path"]) if data.get("tls_key_path") else None,
             hot_reload=data.get("hot_reload", False),
+            config_path=Path(data["config_path"]) if data.get("config_path") else None,
         )
 
     @classmethod

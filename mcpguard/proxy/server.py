@@ -349,12 +349,14 @@ def start_proxy(state: AppState) -> None:
     config = state.config
     app = _app_factory(state)
 
-    if config.hot_reload and config.log_dir:
-        from mcpguard.proxy.config_watcher import ConfigWatcher
-        watcher = ConfigWatcher(config.log_dir.parent / "mcpguard.yaml", state.reload_config)
-        watcher.start()
-
     from rich import print as rprint
+
+    if config.hot_reload and config.config_path:
+        from mcpguard.proxy.config_watcher import ConfigWatcher
+        watcher = ConfigWatcher(config.config_path, state.reload_config)
+        watcher.start()
+        rprint(f"  Watch:  [green]{config.config_path.name}[/green]")
+
     rprint("\n[bold green]MCPGuard v0.3.0[/bold green]")
     rprint(f"  Mode:   [yellow]{config.mode}[/yellow]")
     if config.mode == "http":

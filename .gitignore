@@ -31,5 +31,5 @@ mcpguard_logs/
 .mypy_cache/
 .ruff_cache/
 
-# Config with secrets (template is fine, actual values should not be committed)
-# mcpguard.yaml may contain api_key - keep it out
+# Config (personal copy, not the template)
+mcpguard.yaml
