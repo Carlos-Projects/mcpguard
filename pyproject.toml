@@ -22,10 +22,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Application Frameworks",
 ]
 
-[project.urls]
-Homepage = "https://github.com/Carlos-Projects/mcpguard"
-Source = "https://github.com/Carlos-Projects/mcpguard"
-Issues = "https://github.com/Carlos-Projects/mcpguard/issues"
 dependencies = [
     "mcp>=1.0.0",
     "typer>=0.12.0",
@@ -36,6 +32,11 @@ dependencies = [
     "jinja2>=3.1.0",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Carlos-Projects/mcpguard"
+Source = "https://github.com/Carlos-Projects/mcpguard"
+Issues = "https://github.com/Carlos-Projects/mcpguard/issues"
 
 [project.optional-dependencies]
 dev = [
