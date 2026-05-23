@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: python -m pytest tests/ -v --ignore=tests/test_integration_stdio.py -x
+      - run: python -m pytest tests/ -v --ignore=tests/test_integration_stdio.py --ignore=tests/test_integration_http.py -x
 
   integration:
     needs: [lint, test]
