@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "mcpguard"
+name = "mcpguard-proxy"
 version = "0.3.0"
 description = "Runtime security proxy for MCP (Model Context Protocol) and A2A (Agent-to-Agent)"
 readme = "README.md"
@@ -37,6 +37,7 @@ dependencies = [
 Homepage = "https://github.com/Carlos-Projects/mcpguard"
 Source = "https://github.com/Carlos-Projects/mcpguard"
 Issues = "https://github.com/Carlos-Projects/mcpguard/issues"
+Changelog = "https://github.com/Carlos-Projects/mcpguard/releases"
 
 [project.optional-dependencies]
 dev = [
