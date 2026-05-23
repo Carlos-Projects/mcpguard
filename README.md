@@ -1,5 +1,9 @@
 # MCPGuard
 
+[![CI](https://github.com/Carlos-Projects/mcpguard/actions/workflows/ci.yml/badge.svg)](https://github.com/Carlos-Projects/mcpguard/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://pypi.org/project/mcpguard/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 Runtime security proxy for the **Model Context Protocol (MCP)** and **Agent-to-Agent (A2A)** protocols.
 
 MCPGuard sits between MCP clients and servers, inspecting every JSON-RPC message in real time to detect and block security threats. Supports both **HTTP SSE** and **stdio** transport modes.
