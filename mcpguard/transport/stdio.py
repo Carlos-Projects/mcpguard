@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from mcpguard.transport.base import MCPTransport
 
@@ -74,7 +74,7 @@ class StdioTransport(MCPTransport):
             raise TimeoutError(f"Timeout waiting for response to id={msg_id}")
 
     async def _send_raw(self, body: bytes) -> bytes:
-        if self._process is None or self._process.stdin is None:
+        if self._process is None or self._process.stdin is None or self._process.stdout is None:
             raise RuntimeError("Transport not connected")
         self._process.stdin.write(body + b"\n")
         await self._process.stdin.drain()

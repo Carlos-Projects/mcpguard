@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import AsyncIterator
+from collections.abc import AsyncGenerator
 
 
 class MCPTransport(ABC):
@@ -14,7 +14,7 @@ class MCPTransport(ABC):
         ...
 
     @abstractmethod
-    async def event_stream(self) -> AsyncIterator[bytes]:
+    def event_stream(self) -> AsyncGenerator[bytes, None]:
         ...
 
     @abstractmethod

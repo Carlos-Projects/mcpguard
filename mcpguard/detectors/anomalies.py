@@ -40,7 +40,7 @@ class AnomalyDetector:
             for m, ts_list in self._timeline.items()
         }
         if all_recent:
-            top_m = max(all_recent, key=all_recent.get)
+            top_m = max(all_recent, key=lambda k: all_recent[k])
             top_c = all_recent[top_m]
             total_recent = sum(all_recent.values())
             if total_recent > 10 and top_c / total_recent > 0.9:

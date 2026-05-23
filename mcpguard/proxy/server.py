@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import json
-import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
 
 import httpx
 import uvicorn
@@ -14,17 +13,17 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
-from mcpguard.detectors.base import registry
 import mcpguard.detectors.prompt_injection  # noqa: F401
-import mcpguard.detectors.tool_poisoning  # noqa: F401
 import mcpguard.detectors.resource_prompt  # noqa: F401
+import mcpguard.detectors.tool_poisoning  # noqa: F401
 from mcpguard.detectors.anomalies import AnomalyDetector
+from mcpguard.detectors.base import registry
 from mcpguard.main import AppState, ProxyConfig, SecurityEvent
 from mcpguard.proxy.cache import ToolCache
 from mcpguard.proxy.inspector import MessageInspector
 from mcpguard.proxy.metrics import render_prometheus
 from mcpguard.proxy.rules import RuleEngine
-from mcpguard.proxy.session import Session, SessionManager
+from mcpguard.proxy.session import SessionManager
 from mcpguard.transport.http import HTTPTransport
 from mcpguard.transport.stdio import StdioTransport
 
@@ -220,10 +219,13 @@ async def _handle_message(
         return Response(content=resp_bytes, media_type="application/json")
 
     if config.mode == "http" and transport_http:
+        client = transport_http._client
+        if client is None:
+            return JSONResponse({"error": "Transport not connected"}, status_code=502)
         session_id_param = f"?session_id={session_id}" if session_id else ""
         target_url = f"{transport_http._messages_url}{session_id_param}"
         try:
-            resp = await transport_http._client.post(
+            resp = await client.post(
                 target_url, content=body_bytes,
                 headers={k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")},
             )
@@ -353,7 +355,7 @@ def start_proxy(state: AppState) -> None:
         watcher.start()
 
     from rich import print as rprint
-    rprint(f"\n[bold green]MCPGuard v0.3.0[/bold green]")
+    rprint("\n[bold green]MCPGuard v0.3.0[/bold green]")
     rprint(f"  Mode:   [yellow]{config.mode}[/yellow]")
     if config.mode == "http":
         rprint(f"  Target: [yellow]{config.target_url}[/yellow]")
@@ -363,15 +365,15 @@ def start_proxy(state: AppState) -> None:
     rprint(f"  SSE:    [yellow]{config.sse_path}[/yellow]  Msgs: [yellow]{config.messages_path}[/yellow]")
     protocol = "https" if config.tls_cert_path else "http"
     rprint(f"  Dash:   [blue]{protocol}://{config.listen_host}:{config.listen_port}/_mcpguard/[/blue]")
-    rprint(f"  Health: [yellow]/health[/yellow]  Metrics: [yellow]/metrics[/yellow]")
+    rprint("  Health: [yellow]/health[/yellow]  Metrics: [yellow]/metrics[/yellow]")
     if config.api_key:
-        rprint(f"  Auth:   [green]enabled[/green]")
+        rprint("  Auth:   [green]enabled[/green]")
     else:
-        rprint(f"  Auth:   [dim]disabled[/dim]")
+        rprint("  Auth:   [dim]disabled[/dim]")
     if config.tls_cert_path:
         rprint(f"  TLS:    [green]enabled[/green] ({config.tls_cert_path.name})")
     if config.hot_reload:
-        rprint(f"  Reload: [green]enabled[/green]")
+        rprint("  Reload: [green]enabled[/green]")
     if config.allowlisted_tools:
         rprint(f"  Allow:  [green]{', '.join(sorted(config.allowlisted_tools))}[/green]")
     if config.denylisted_tools:
@@ -379,10 +381,10 @@ def start_proxy(state: AppState) -> None:
     if registry.plugins:
         rprint(f"  Plugins: [cyan]{', '.join(p.name for p in registry.plugins)}[/cyan]")
 
-    ssl_kwargs = {}
+    ssl_kwargs: dict[str, object] = {}
     if config.tls_cert_path:
         ssl_kwargs["ssl_certfile"] = str(config.tls_cert_path)
     if config.tls_key_path:
         ssl_kwargs["ssl_keyfile"] = str(config.tls_key_path)
 
-    uvicorn.run(app, host=config.listen_host, port=config.listen_port, log_level="info", **ssl_kwargs)
+    uvicorn.run(app, host=config.listen_host, port=config.listen_port, log_level="info", **ssl_kwargs)  # type: ignore[arg-type]

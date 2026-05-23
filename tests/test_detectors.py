@@ -1,6 +1,6 @@
+from mcpguard.detectors.anomalies import AnomalyDetector
 from mcpguard.detectors.prompt_injection import PromptInjectionPlugin
 from mcpguard.detectors.tool_poisoning import ToolPoisoningPlugin
-from mcpguard.detectors.anomalies import AnomalyDetector
 
 
 class TestPromptInjection:
