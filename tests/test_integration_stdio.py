@@ -13,6 +13,22 @@ HERE = Path(__file__).resolve().parent
 TEST_SERVER = HERE / "mcp_test_server.py"
 
 
+async def wait_for_url(url: str, timeout: float = 15.0) -> bool:
+    deadline = time.time() + timeout
+    delay = 0.1
+    async with httpx.AsyncClient() as c:
+        while time.time() < deadline:
+            try:
+                r = await c.get(url, timeout=1.0)
+                if r.status_code == 200:
+                    return True
+            except Exception:
+                pass
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 1.0)
+    return False
+
+
 @pytest.fixture(scope="module")
 def proxy_port() -> int:
     return 19879
@@ -33,7 +49,6 @@ def proxy_stdio_process(proxy_port: int):
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    time.sleep(4)
     yield
     proc.terminate()
     proc.wait()
@@ -41,17 +56,12 @@ def proxy_stdio_process(proxy_port: int):
 
 @pytest.mark.asyncio
 async def test_stdio_health(proxy_stdio_process, proxy_port: int):
+    url = f"http://127.0.0.1:{proxy_port}/health"
+    assert await wait_for_url(url), "Stdio proxy health endpoint not ready"
     async with httpx.AsyncClient() as c:
-        for i in range(15):
-            try:
-                r = await c.get(f"http://127.0.0.1:{proxy_port}/health", timeout=1.0)
-                if r.status_code == 200:
-                    assert r.json()["status"] == "ok"
-                    return
-            except Exception:
-                pass
-            await asyncio.sleep(0.5)
-    pytest.fail("Stdio proxy health endpoint not ready")
+        r = await c.get(url, timeout=1.0)
+        data = r.json()
+        assert data["status"] == "ok"
 
 
 @pytest.mark.asyncio

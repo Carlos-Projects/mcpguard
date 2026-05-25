@@ -37,6 +37,13 @@ def render_prometheus(metrics: dict[str, Any]) -> str:
         "# TYPE mcpguard_sse_total_connections counter",
         f"mcpguard_sse_total_connections {metrics.get('sse_total_connections', 0)}",
         "",
+        "# HELP mcpguard_uptime_seconds Proxy uptime in seconds",
+        "# TYPE mcpguard_uptime_seconds gauge",
+        f"mcpguard_uptime_seconds {metrics.get('uptime_seconds', 0)}",
+        "",
+        "# HELP mcpguard_active_sse_connections Current active SSE connections",
+        "# TYPE mcpguard_active_sse_connections gauge",
+        f"mcpguard_active_sse_connections {metrics.get('sse_connections', 0)}",
     ]
     for tool, count in metrics.get("tool_calls", {}).items():
         label = _sanitize_label(tool)

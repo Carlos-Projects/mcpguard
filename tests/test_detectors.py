@@ -1,5 +1,6 @@
 from mcpguard.detectors.anomalies import AnomalyDetector
 from mcpguard.detectors.prompt_injection import PromptInjectionPlugin
+from mcpguard.detectors.resource_prompt import ResourcePromptPlugin
 from mcpguard.detectors.tool_poisoning import ToolPoisoningPlugin
 
 
@@ -149,3 +150,47 @@ class TestAnomalyDetector:
         assert stats["total"] == 2
         assert "tools/call" in stats["methods"]
         assert "tools/list" in stats["methods"]
+
+
+class TestResourcePromptDetector:
+    def setup_method(self):
+        self.detector = ResourcePromptPlugin()
+
+    def test_suspicious_resource_uri(self):
+        msg = {
+            "method": "resources/read",
+            "params": {"uri": "file:///etc/passwd"},
+        }
+        result = self.detector.inspect_request(msg)
+        assert result is not None
+        assert result.event_type == "suspicious_resource"
+
+    def test_suspicious_prompt_name(self):
+        msg = {
+            "method": "prompts/get",
+            "params": {"name": "system_override"},
+        }
+        result = self.detector.inspect_request(msg)
+        assert result is not None
+        assert result.event_type == "suspicious_prompt"
+
+    def test_benign_resource(self):
+        msg = {
+            "method": "resources/read",
+            "params": {"uri": "mcp://docs/readme"},
+        }
+        result = self.detector.inspect_request(msg)
+        assert result is None
+
+    def test_benign_prompt(self):
+        msg = {
+            "method": "prompts/get",
+            "params": {"name": "weather_query"},
+        }
+        result = self.detector.inspect_request(msg)
+        assert result is None
+
+    def test_non_resource_method(self):
+        msg = {"method": "tools/call", "params": {"name": "search"}}
+        result = self.detector.inspect_request(msg)
+        assert result is None

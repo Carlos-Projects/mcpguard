@@ -14,6 +14,7 @@ class HTTPTransport(MCPTransport):
         target_url: str,
         sse_path: str = "/sse",
         messages_path: str = "/messages/",
+        timeout: float = 30.0,
     ) -> None:
         parsed = urlparse(target_url)
         if parsed.scheme not in ("http", "https"):
@@ -24,9 +25,10 @@ class HTTPTransport(MCPTransport):
         self._client: httpx.AsyncClient | None = None
         self._sse_url = f"{self._target_url}{self._sse_path}"
         self._messages_url = f"{self._target_url}{self._messages_path}"
+        self._timeout = timeout
 
     async def connect(self) -> None:
-        self._client = httpx.AsyncClient(timeout=30.0, follow_redirects=False)
+        self._client = httpx.AsyncClient(timeout=self._timeout, follow_redirects=False)
 
     async def send_message(self, body: bytes) -> bytes:
         if self._client is None:

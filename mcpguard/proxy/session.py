@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import secrets
 import time
 from typing import Any
 
 from mcpguard.transport.base import MCPTransport
+from mcpguard.utils import push_event
+
+logger = logging.getLogger("mcpguard")
 
 
 class Session:
@@ -18,10 +22,7 @@ class Session:
         self._event_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=1000)
 
     async def push_event(self, data: bytes) -> None:
-        try:
-            await asyncio.wait_for(self._event_queue.put(data), timeout=1.0)
-        except (asyncio.TimeoutError, asyncio.QueueFull):
-            pass
+        await push_event(self._event_queue, data)
 
     async def get_event(self) -> bytes:
         return await asyncio.wait_for(self._event_queue.get(), timeout=30.0)
@@ -42,8 +43,8 @@ class Session:
             try:
                 async for event in self.transport.event_stream():
                     await self.push_event(event)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Session event loop error: %s", e, exc_info=True)
 
         self._event_task = asyncio.create_task(_run())
 
@@ -52,8 +53,8 @@ class Session:
             self._event_task.cancel()
             try:
                 await self._event_task
-            except (asyncio.CancelledError, Exception):
-                pass
+            except (asyncio.CancelledError, Exception) as e:
+                logger.debug("Session event task cancelled: %s", e)
         await self.transport.close()
 
 
@@ -100,8 +101,8 @@ class SessionManager:
             self._cleanup_task.cancel()
             try:
                 await self._cleanup_task
-            except (asyncio.CancelledError, Exception):
-                pass
+            except (asyncio.CancelledError, Exception) as e:
+                logger.debug("Cleanup task cancelled: %s", e)
 
     async def close_all(self) -> None:
         for sid in list(self._sessions):

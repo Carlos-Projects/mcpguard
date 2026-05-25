@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import threading
-import time
+import asyncio
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("mcpguard")
 
 
 class ConfigWatcher:
@@ -14,22 +16,27 @@ class ConfigWatcher:
         self._interval = interval
         self._mtime: float = 0
         self._running = False
-        self._thread: threading.Thread | None = None
+        self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
         if not self._path.exists():
             return
         self._mtime = self._path.stat().st_mtime
         self._running = True
-        self._thread = threading.Thread(target=self._watch, daemon=True)
-        self._thread.start()
+        self._task = asyncio.create_task(self._watch())
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         self._running = False
+        if self._task and not self._task.done():
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
 
-    def _watch(self) -> None:
+    async def _watch(self) -> None:
         while self._running:
-            time.sleep(self._interval)
+            await asyncio.sleep(self._interval)
             if not self._path.exists():
                 continue
             try:
@@ -46,5 +53,6 @@ class ConfigWatcher:
                     else:
                         continue
                     self._callback(data)
-            except Exception:
-                pass
+                    logger.info("Config reloaded from %s", self._path)
+            except Exception as e:
+                logger.warning("Config watch error: %s", e, exc_info=True)

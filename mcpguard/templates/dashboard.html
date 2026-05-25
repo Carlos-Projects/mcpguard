@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MCPGuard Dashboard</title>
-<script src="https://unpkg.com/htmx.org@1.9.10"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/htmx.org@1.9.10" onerror="this.src='/static/htmx.min.js'"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" onerror="this.src='/static/chart.min.js'"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
@@ -151,6 +151,15 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    const filter = btn.dataset.filter;
+    document.querySelectorAll('#events-list tr').forEach(row => {
+      if (filter === 'all') {
+        row.style.display = '';
+      } else {
+        const badge = row.querySelector('.badge');
+        row.style.display = badge && badge.classList.contains(filter) ? '' : 'none';
+      }
+    });
   });
 });
 </script>

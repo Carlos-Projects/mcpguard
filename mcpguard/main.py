@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -52,11 +53,41 @@ class ProxyConfig:
     hot_reload: bool = False
     config_path: Path | None = None
     max_sse_connections: int = 100
+    request_timeout: float = 30.0
+
+    def validate(self) -> list[str]:
+        errors: list[str] = []
+        if self.mode not in ("http", "stdio"):
+            errors.append(f"Invalid mode: {self.mode}")
+        if not (1 <= self.listen_port <= 65535):
+            errors.append(f"Invalid port: {self.listen_port}")
+        if self.rate_limit <= 0:
+            errors.append("rate_limit must be positive")
+        if self.rate_window <= 0:
+            errors.append("rate_window must be positive")
+        if self.max_sse_connections <= 0:
+            errors.append("max_sse_connections must be positive")
+        if self.request_timeout <= 0:
+            errors.append("request_timeout must be positive")
+        if self.mode == "stdio" and not self.command:
+            errors.append("command required for stdio mode")
+        if self.tls_cert_path and not self.tls_cert_path.exists():
+            errors.append(f"TLS cert not found: {self.tls_cert_path}")
+        if self.tls_key_path and not self.tls_key_path.exists():
+            errors.append(f"TLS key not found: {self.tls_key_path}")
+        if self.allowlisted_tools and self.denylisted_tools:
+            overlap = self.allowlisted_tools & self.denylisted_tools
+            if overlap:
+                errors.append(f"Tools in both allow and deny lists: {overlap}")
+        return errors
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProxyConfig:
         allow = set(data.get("allowlisted_tools", data.get("allow", [])))
         deny = set(data.get("denylisted_tools", data.get("deny", [])))
+        cmd = data.get("command")
+        if isinstance(cmd, str):
+            cmd = cmd.split()
         return cls(
             mode=data.get("mode", "http"),
             listen_host=data.get("listen_host", data.get("host", "127.0.0.1")),
@@ -64,7 +95,7 @@ class ProxyConfig:
             target_url=data.get("target_url", data.get("target", "http://localhost:8000")),
             sse_path=data.get("sse_path", "/sse"),
             messages_path=data.get("messages_path", "/messages/"),
-            command=data.get("command"),
+            command=cmd,
             env=data.get("env"),
             log_dir=Path(data.get("log_dir", "./mcpguard_logs")),
             allowlisted_tools=allow,
@@ -79,6 +110,7 @@ class ProxyConfig:
             hot_reload=data.get("hot_reload", False),
             config_path=Path(data["config_path"]) if data.get("config_path") else None,
             max_sse_connections=data.get("max_sse_connections", 100),
+            request_timeout=data.get("request_timeout", 30.0),
         )
 
     @classmethod
@@ -101,6 +133,7 @@ class AppState:
         self.config = config or ProxyConfig()
         self.events: list[SecurityEvent] = []
         self._start_time: datetime = datetime.now(timezone.utc)
+        self._metrics_lock = asyncio.Lock()
         self.metrics: dict[str, Any] = {
             "total_requests": 0,
             "blocked_requests": 0,
@@ -117,14 +150,23 @@ class AppState:
     def uptime(self) -> int:
         return int((datetime.now(timezone.utc) - self._start_time).total_seconds())
 
+    async def inc_metric(self, key: str, delta: int = 1) -> None:
+        async with self._metrics_lock:
+            self.metrics[key] = self.metrics.get(key, 0) + delta
+
+    async def dec_metric(self, key: str, delta: int = 1) -> None:
+        async with self._metrics_lock:
+            self.metrics[key] = self.metrics.get(key, 0) - delta
+
     def log_event(self, event: SecurityEvent) -> None:
         self.events.append(event)
         log_file = self.config.log_dir / f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.jsonl"
         try:
             with open(log_file, "a") as f:
                 f.write(json.dumps(event.to_dict()) + "\n")
-        except OSError:
-            pass
+        except OSError as e:
+            import logging
+            logging.getLogger("mcpguard").warning("Failed to write log: %s", e)
 
     def get_events_since(self, since: datetime | None = None) -> list[SecurityEvent]:
         if since is None:
