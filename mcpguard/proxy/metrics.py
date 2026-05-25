@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import re
 from typing import Any
+
+
+def _sanitize_label(value: str) -> str:
+    sanitized = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    if re.search(r'[^\x20-\x7E]', sanitized):
+        sanitized = "invalid"
+    return sanitized
 
 
 def render_prometheus(metrics: dict[str, Any]) -> str:
@@ -25,12 +33,12 @@ def render_prometheus(metrics: dict[str, Any]) -> str:
         "# TYPE mcpguard_anomalies_detected counter",
         f"mcpguard_anomalies_detected {metrics['anomalies_detected']}",
         "",
-        "# HELP mcpguard_sse_connections Total SSE connections",
-        "# TYPE mcpguard_sse_connections counter",
-        f"mcpguard_sse_connections {metrics['sse_connections']}",
+        "# HELP mcpguard_sse_total_connections Total SSE connections",
+        "# TYPE mcpguard_sse_total_connections counter",
+        f"mcpguard_sse_total_connections {metrics.get('sse_total_connections', 0)}",
         "",
     ]
     for tool, count in metrics.get("tool_calls", {}).items():
-        sanitized = tool.replace('"', '\\"').replace("\n", "")
-        lines.append(f"mcpguard_tool_calls_total{{tool=\"{sanitized}\"}} {count}")
+        label = _sanitize_label(tool)
+        lines.append(f'mcpguard_tool_calls_total{{tool="{label}"}} {count}')
     return "\n".join(lines) + "\n"

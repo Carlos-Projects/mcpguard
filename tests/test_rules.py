@@ -36,27 +36,27 @@ class TestRateLimit:
         config = ProxyConfig(rate_limit=3, rate_window=60)
         self.engine = RuleEngine(config)
 
-    def test_under_limit(self):
-        result = self.engine.check_rate("tools/call")
+    async def test_under_limit(self):
+        result = await self.engine.check_rate("tools/call")
         assert result is None
-        result = self.engine.check_rate("tools/call")
+        result = await self.engine.check_rate("tools/call")
         assert result is None
 
-    def test_exceeds_limit(self):
+    async def test_exceeds_limit(self):
         for _ in range(3):
-            self.engine.check_rate("tools/call")
-        result = self.engine.check_rate("tools/call")
+            await self.engine.check_rate("tools/call")
+        result = await self.engine.check_rate("tools/call")
         assert result is not None
         assert result.blocked is True
         assert result.event_type == "rate_limit"
 
-    def test_different_methods_separate(self):
+    async def test_different_methods_separate(self):
         config = ProxyConfig(rate_limit=1, rate_window=60)
         engine = RuleEngine(config)
 
-        engine.check_rate("tools/call")
-        r1 = engine.check_rate("tools/call")
+        await engine.check_rate("tools/call")
+        r1 = await engine.check_rate("tools/call")
         assert r1 is not None
 
-        r2 = engine.check_rate("tools/list")
+        r2 = await engine.check_rate("tools/list")
         assert r2 is None

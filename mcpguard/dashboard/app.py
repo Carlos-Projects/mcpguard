@@ -16,13 +16,6 @@ templates = Jinja2Templates(directory=str(_TEMPLATE_DIR))
 _timeline: list[dict] = []
 
 
-def _uptime(state: AppState) -> int:
-    for ev in reversed(state.events):
-        if ev.event_type in ("sse_connect", "request", "message"):
-            return int((datetime.now(timezone.utc).replace(tzinfo=None) - ev.timestamp).total_seconds())
-    return 0
-
-
 def _active_rules(state: AppState) -> int:
     c = state.config
     return int(bool(c.allowlisted_tools)) + int(bool(c.denylisted_tools)) + 1
@@ -33,7 +26,7 @@ def dashboard_routes(state: AppState) -> list[Route]:
         return templates.TemplateResponse(
             request=request,
             name="dashboard.html",
-            context={"request": request, "uptime": _uptime(state)},
+            context={"request": request, "uptime": state.uptime},
         )
 
     async def metrics(request):
@@ -49,13 +42,13 @@ def dashboard_routes(state: AppState) -> list[Route]:
                 "injections": m["injections_detected"],
                 "poisonings": m["poisoning_detected"],
                 "anomalies": m["anomalies_detected"],
-                "uptime": _uptime(state),
+                "uptime": state.uptime,
                 "active_rules": _active_rules(state),
             },
         )
 
     async def events(request):
-        recent = state.get_events_since(datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=15))
+        recent = state.get_events_since(datetime.now(timezone.utc) - timedelta(minutes=15))
         return templates.TemplateResponse(
             request=request,
             name="events.html",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from urllib.parse import urlparse
 
 import httpx
 
@@ -14,6 +15,9 @@ class HTTPTransport(MCPTransport):
         sse_path: str = "/sse",
         messages_path: str = "/messages/",
     ) -> None:
+        parsed = urlparse(target_url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"target_url must start with http:// or https://, got: {target_url}")
         self._target_url = target_url.rstrip("/")
         self._sse_path = sse_path
         self._messages_path = messages_path
@@ -22,7 +26,7 @@ class HTTPTransport(MCPTransport):
         self._messages_url = f"{self._target_url}{self._messages_path}"
 
     async def connect(self) -> None:
-        self._client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+        self._client = httpx.AsyncClient(timeout=30.0, follow_redirects=False)
 
     async def send_message(self, body: bytes) -> bytes:
         if self._client is None:

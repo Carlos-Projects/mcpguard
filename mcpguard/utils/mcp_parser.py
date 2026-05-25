@@ -10,7 +10,7 @@ MCP_METHODS = frozenset({
     "resources/read",
     "resources/subscribe",
     "resources/unsubscribe",
-    "resources/templates/list",
+    "resources/template/list",
     "prompts/list",
     "prompts/get",
     "tools/list",

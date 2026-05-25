@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 import time
-import uuid
 from typing import Any
 
 from mcpguard.transport.base import MCPTransport
@@ -10,18 +10,21 @@ from mcpguard.transport.base import MCPTransport
 
 class Session:
     def __init__(self, transport: MCPTransport) -> None:
-        self.id: str = uuid.uuid4().hex[:12]
+        self.id: str = secrets.token_hex(16)
         self.transport = transport
         self.created_at: float = time.time()
         self.last_seen: float = time.time()
         self._event_task: asyncio.Task[None] | None = None
-        self._event_queue: asyncio.Queue[bytes] = asyncio.Queue()
+        self._event_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=1000)
 
     async def push_event(self, data: bytes) -> None:
-        await self._event_queue.put(data)
+        try:
+            await asyncio.wait_for(self._event_queue.put(data), timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.QueueFull):
+            pass
 
     async def get_event(self) -> bytes:
-        return await self._event_queue.get()
+        return await asyncio.wait_for(self._event_queue.get(), timeout=30.0)
 
     def touch(self) -> None:
         self.last_seen = time.time()
@@ -38,7 +41,7 @@ class Session:
         async def _run() -> None:
             try:
                 async for event in self.transport.event_stream():
-                    await self._event_queue.put(event)
+                    await self.push_event(event)
             except Exception:
                 pass
 

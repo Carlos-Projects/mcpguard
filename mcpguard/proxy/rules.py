@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from collections import defaultdict
 
@@ -10,6 +11,7 @@ class RuleEngine:
     def __init__(self, config: ProxyConfig) -> None:
         self.config = config
         self._rate_counts: dict[str, list[float]] = defaultdict(list)
+        self._lock = asyncio.Lock()
 
     def is_allowed(self, method: str) -> bool:
         if not method:
@@ -25,34 +27,37 @@ class RuleEngine:
             return False
         return True
 
-    def check_rate(self, method: str) -> SecurityEvent | None:
+    async def check_rate(self, method: str, client_ip: str = "") -> SecurityEvent | None:
         now = time.time()
         window_start = now - self.config.rate_window
-        self._rate_counts[method] = [
-            t for t in self._rate_counts[method] if t > window_start
-        ]
+        key = f"{client_ip}:{method}" if client_ip else method
 
-        if len(self._rate_counts[method]) >= self.config.rate_limit:
-            return SecurityEvent(
-                event_type="rate_limit",
-                severity="medium",
-                message=f"Rate limit exceeded for {method}",
-                details={
-                    "method": method,
-                    "count": len(self._rate_counts[method]),
-                    "limit": self.config.rate_limit,
-                    "window": self.config.rate_window,
-                },
-                blocked=True,
-            )
+        async with self._lock:
+            self._rate_counts[key] = [
+                t for t in self._rate_counts[key] if t > window_start
+            ]
 
-        self._rate_counts[method].append(now)
+            if len(self._rate_counts[key]) >= self.config.rate_limit:
+                return SecurityEvent(
+                    event_type="rate_limit",
+                    severity="medium",
+                    message=f"Rate limit exceeded for {method}",
+                    details={
+                        "method": method,
+                        "count": len(self._rate_counts[key]),
+                        "limit": self.config.rate_limit,
+                        "window": self.config.rate_window,
+                    },
+                    blocked=True,
+                )
+
+            self._rate_counts[key].append(now)
         return None
 
     def get_rate_counts(self) -> dict[str, int]:
         now = time.time()
         window_start = now - self.config.rate_window
         return {
-            method: len([t for t in ts if t > window_start])
-            for method, ts in self._rate_counts.items()
+            key: len([t for t in ts if t > window_start])
+            for key, ts in self._rate_counts.items()
         }

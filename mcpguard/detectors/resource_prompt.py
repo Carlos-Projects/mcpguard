@@ -31,6 +31,8 @@ SUSPICIOUS_PROMPT_NAMES = [
     "hidden",
 ]
 
+_URI_METHODS = frozenset({"resources/read", "resources/subscribe"})
+
 
 class ResourcePromptPlugin(DetectionPlugin):
     name = "resource_prompt"
@@ -41,7 +43,7 @@ class ResourcePromptPlugin(DetectionPlugin):
         if not isinstance(params, dict):
             return None
 
-        if method == "resources/read":
+        if method in _URI_METHODS:
             uri = params.get("uri", "")
             for pattern in SUSPICIOUS_URI_PATTERNS:
                 if pattern in uri:

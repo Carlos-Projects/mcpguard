@@ -15,7 +15,7 @@ class SecurityEvent:
     severity: str
     message: str
     details: dict[str, Any]
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     blocked: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -51,6 +51,7 @@ class ProxyConfig:
     tls_key_path: Path | None = None
     hot_reload: bool = False
     config_path: Path | None = None
+    max_sse_connections: int = 100
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProxyConfig:
@@ -77,6 +78,7 @@ class ProxyConfig:
             tls_key_path=Path(data["tls_key_path"]) if data.get("tls_key_path") else None,
             hot_reload=data.get("hot_reload", False),
             config_path=Path(data["config_path"]) if data.get("config_path") else None,
+            max_sse_connections=data.get("max_sse_connections", 100),
         )
 
     @classmethod
@@ -98,6 +100,7 @@ class AppState:
     def __init__(self, config: ProxyConfig | None = None) -> None:
         self.config = config or ProxyConfig()
         self.events: list[SecurityEvent] = []
+        self._start_time: datetime = datetime.now(timezone.utc)
         self.metrics: dict[str, Any] = {
             "total_requests": 0,
             "blocked_requests": 0,
@@ -105,15 +108,23 @@ class AppState:
             "poisoning_detected": 0,
             "anomalies_detected": 0,
             "sse_connections": 0,
+            "sse_total_connections": 0,
             "tool_calls": {},
         }
         self.config.log_dir.mkdir(parents=True, exist_ok=True)
 
+    @property
+    def uptime(self) -> int:
+        return int((datetime.now(timezone.utc) - self._start_time).total_seconds())
+
     def log_event(self, event: SecurityEvent) -> None:
         self.events.append(event)
         log_file = self.config.log_dir / f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.jsonl"
-        with open(log_file, "a") as f:
-            f.write(json.dumps(event.to_dict()) + "\n")
+        try:
+            with open(log_file, "a") as f:
+                f.write(json.dumps(event.to_dict()) + "\n")
+        except OSError:
+            pass
 
     def get_events_since(self, since: datetime | None = None) -> list[SecurityEvent]:
         if since is None:
@@ -122,7 +133,6 @@ class AppState:
 
     def reload_config(self, data: dict[str, Any]) -> None:
         new_config = ProxyConfig.from_dict(data)
-        self.config.listen_host = new_config.listen_host
         self.config.allowlisted_tools = new_config.allowlisted_tools
         self.config.denylisted_tools = new_config.denylisted_tools
         self.config.rate_limit = new_config.rate_limit

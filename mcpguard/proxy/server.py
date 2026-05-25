@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import httpx
 import uvicorn
@@ -44,6 +46,13 @@ def _make_stdio_transport(config: ProxyConfig) -> StdioTransport | None:
     return None
 
 
+def _redact(value: Any) -> str:
+    s = str(value)
+    if len(s) > 80:
+        return s[:40] + "...[redacted]" + s[-20:]
+    return s
+
+
 def _build_proxy_base(request: Request, config: ProxyConfig) -> str:
     scheme = request.url.scheme
     host = request.url.hostname
@@ -53,30 +62,45 @@ def _build_proxy_base(request: Request, config: ProxyConfig) -> str:
     return f"{scheme}://{host}:{port}"
 
 
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 async def _handle_sse_http(
     state: AppState,
     config: ProxyConfig,
     transport: HTTPTransport,
     request: Request,
 ) -> Response:
-    proxy_base = _build_proxy_base(request, config)
+    if state.metrics["sse_connections"] >= config.max_sse_connections:
+        return JSONResponse({"error": "Too many SSE connections"}, status_code=503)
+
     state.metrics["sse_connections"] += 1
+    state.metrics["sse_total_connections"] += 1
     state.log_event(SecurityEvent(
         event_type="sse_connect", severity="info",
-        message=f"SSE via HTTP → {config.target_url}",
+        message=f"SSE via HTTP -> {config.target_url}",
         details={"mode": "http", "target": config.target_url},
     ))
 
+    proxy_base = _build_proxy_base(request, config)
+
     async def stream() -> AsyncGenerator[bytes, None]:
-        async for raw in transport.event_stream():
-            decoded = raw.decode("utf-8", errors="replace").rstrip("\n")
-            if decoded.startswith("data: "):
-                data_val = decoded[6:]
-                if data_val.startswith("/"):
-                    decoded = f"data: {proxy_base}{data_val}"
-                elif config.target_url.rstrip("/") in data_val:
-                    decoded = decoded.replace(config.target_url.rstrip("/"), proxy_base)
-            yield (decoded + "\n").encode()
+        try:
+            async for raw in transport.event_stream():
+                decoded = raw.decode("utf-8", errors="replace").rstrip("\n")
+                if decoded.startswith("data: "):
+                    data_val = decoded[6:]
+                    if data_val.startswith("/"):
+                        decoded = f"data: {proxy_base}{data_val}"
+                    elif config.target_url.rstrip("/") in data_val:
+                        decoded = decoded.replace(config.target_url.rstrip("/"), proxy_base)
+                yield (decoded + "\n").encode()
+        finally:
+            state.metrics["sse_connections"] -= 1
 
     return StreamingResponse(
         stream(), media_type="text/event-stream",
@@ -87,6 +111,9 @@ async def _handle_sse_http(
 async def _handle_sse_stdio(
     state: AppState, config: ProxyConfig, session_manager: SessionManager, request: Request,
 ) -> Response:
+    if state.metrics["sse_connections"] >= config.max_sse_connections:
+        return JSONResponse({"error": "Too many SSE connections"}, status_code=503)
+
     transport = _make_stdio_transport(config)
     if transport is None:
         return JSONResponse({"error": "No stdio command configured"}, status_code=500)
@@ -94,11 +121,13 @@ async def _handle_sse_stdio(
     session = session_manager.create(transport)
     proxy_base = _build_proxy_base(request, config)
     messages_url = f"{proxy_base}{config.messages_path}?session_id={session.id}"
+
     state.metrics["sse_connections"] += 1
+    state.metrics["sse_total_connections"] += 1
     state.log_event(SecurityEvent(
         event_type="sse_connect", severity="info",
         message=f"SSE via stdio session={session.id}",
-        details={"mode": "stdio", "session_id": session.id, "command": config.command},
+        details={"mode": "stdio", "session_id": session.id},
     ))
     await session.start_event_loop()
 
@@ -108,23 +137,24 @@ async def _handle_sse_stdio(
             while True:
                 try:
                     event = await session.get_event()
-                    decoded = event.decode("utf-8", errors="replace").strip()
-                    if not decoded:
-                        continue
-                    try:
-                        data = json.loads(decoded)
-                        for plugin in registry.plugins:
-                            ev = plugin.inspect_sse_event("message", data)
-                            if ev:
-                                state.metrics["injections_detected"] += 1
-                                state.log_event(ev)
-                    except json.JSONDecodeError:
-                        pass
-                    yield f"event: message\ndata: {decoded}\n\n".encode()
-                except Exception:
+                except (asyncio.TimeoutError, Exception):
                     break
+                decoded = event.decode("utf-8", errors="replace").strip()
+                if not decoded:
+                    continue
+                try:
+                    data = json.loads(decoded)
+                    for plugin in registry.plugins:
+                        ev = plugin.inspect_sse_event("message", data)
+                        if ev:
+                            state.metrics["injections_detected"] += 1
+                            state.log_event(ev)
+                except json.JSONDecodeError:
+                    pass
+                yield f"event: message\ndata: {decoded}\n\n".encode()
         finally:
             await session_manager.remove(session.id)
+            state.metrics["sse_connections"] -= 1
 
     return StreamingResponse(
         stream(), media_type="text/event-stream",
@@ -142,6 +172,11 @@ async def _handle_message(
     body_str = body_bytes.decode("utf-8", errors="replace")
     if not body_str.strip():
         return JSONResponse({"error": "Empty body"}, status_code=400)
+
+    ct = request.headers.get("content-type", "")
+    if ct and "json" not in ct:
+        return JSONResponse({"error": "Unsupported media type"}, status_code=415)
+
     try:
         msg = json.loads(body_str)
     except json.JSONDecodeError:
@@ -150,7 +185,7 @@ async def _handle_message(
     state.metrics["total_requests"] += 1
     inspected = inspector.inspect(msg)
     method = inspected.get("method") or ""
-    anomaly_detector.record(method)
+    ip = _client_ip(request)
 
     plugin_event = registry.inspect_request(msg)
     if plugin_event:
@@ -168,12 +203,13 @@ async def _handle_message(
         state.log_event(ev)
         return JSONResponse({"error": "Blocked", "detail": f"Method not allowed: {method}"}, status_code=403)
 
-    rate_event = rule_engine.check_rate(method)
+    rate_event = await rule_engine.check_rate(method, client_ip=ip)
     if rate_event:
         state.metrics["blocked_requests"] += 1
         state.log_event(rate_event)
         return JSONResponse({"error": "Rate limited", "detail": rate_event.message}, status_code=429)
 
+    anomaly_detector.record(method)
     anomaly_event = anomaly_detector.check(method)
     if anomaly_event:
         state.metrics["anomalies_detected"] += 1
@@ -265,13 +301,18 @@ async def _handle_health(state: AppState) -> JSONResponse:
     m = state.metrics
     return JSONResponse({
         "status": "ok", "version": "0.3.0",
+        "uptime_seconds": state.uptime,
+        "active_sse_connections": m["sse_connections"],
         "metrics": {
             "total_requests": m["total_requests"], "blocked": m["blocked_requests"],
-            "sse_connections": m["sse_connections"], "injections": m["injections_detected"],
+            "sse_total": m["sse_total_connections"], "injections": m["injections_detected"],
             "poisoning": m["poisoning_detected"], "tool_calls": m["tool_calls"],
         },
         "plugins": [p.name for p in registry.plugins],
     })
+
+
+_UNPROTECTED_PATHS = ("/health",)
 
 
 class _AuthMiddleware(BaseHTTPMiddleware):
@@ -280,10 +321,11 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         self.api_key = api_key
 
     async def dispatch(self, request: Request, call_next):
-        if self.api_key and not request.url.path.startswith(("/health", "/_mcpguard/")):
-            auth = request.headers.get("Authorization", "")
-            if auth != f"Bearer {self.api_key}" and auth != self.api_key:
-                if request.query_params.get("api_key") != self.api_key:
+        if self.api_key:
+            path = request.url.path.rstrip("/")
+            if not any(path.startswith(p) for p in _UNPROTECTED_PATHS):
+                auth = request.headers.get("Authorization", "")
+                if auth != f"Bearer {self.api_key}" and auth != self.api_key:
                     return JSONResponse({"error": "Unauthorized"}, status_code=401)
         return await call_next(request)
 
@@ -362,16 +404,14 @@ def start_proxy(state: AppState) -> None:
     if config.mode == "http":
         rprint(f"  Target: [yellow]{config.target_url}[/yellow]")
     elif config.mode == "stdio":
-        rprint(f"  Cmd:    [yellow]{' '.join(config.command) if config.command else 'N/A'}[/yellow]")
+        cmd_str = " ".join(config.command) if config.command else "N/A"
+        rprint(f"  Cmd:    [yellow]{cmd_str}[/yellow]")
     rprint(f"  Listen: [yellow]{config.listen_host}:{config.listen_port}[/yellow]")
     rprint(f"  SSE:    [yellow]{config.sse_path}[/yellow]  Msgs: [yellow]{config.messages_path}[/yellow]")
     protocol = "https" if config.tls_cert_path else "http"
     rprint(f"  Dash:   [blue]{protocol}://{config.listen_host}:{config.listen_port}/_mcpguard/[/blue]")
     rprint("  Health: [yellow]/health[/yellow]  Metrics: [yellow]/metrics[/yellow]")
-    if config.api_key:
-        rprint("  Auth:   [green]enabled[/green]")
-    else:
-        rprint("  Auth:   [dim]disabled[/dim]")
+    rprint("  Auth:   [green]enabled[/green]" if config.api_key else "  Auth:   [dim]disabled[/dim]")
     if config.tls_cert_path:
         rprint(f"  TLS:    [green]enabled[/green] ({config.tls_cert_path.name})")
     if config.hot_reload:

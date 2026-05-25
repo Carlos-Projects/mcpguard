@@ -55,6 +55,9 @@ mcpguard = "mcpguard.cli:app"
 where = ["."]
 include = ["mcpguard*"]
 
+[tool.setuptools.package-data]
+mcpguard = ["templates/*.html"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

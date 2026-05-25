@@ -14,8 +14,9 @@ class StdioTransport(MCPTransport):
         self._env = env
         self._process: asyncio.subprocess.Process | None = None
         self._pending: dict[Any, asyncio.Future[bytes]] = {}
-        self._event_queue: asyncio.Queue[bytes] = asyncio.Queue()
+        self._event_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=1000)
         self._reader_task: asyncio.Task[None] | None = None
+        self._stderr_task: asyncio.Task[None] | None = None
 
     async def connect(self) -> None:
         self._process = await asyncio.create_subprocess_exec(
@@ -26,6 +27,18 @@ class StdioTransport(MCPTransport):
             env=self._env,
         )
         self._reader_task = asyncio.create_task(self._read_stdout())
+        self._stderr_task = asyncio.create_task(self._read_stderr())
+
+    async def _read_stderr(self) -> None:
+        if self._process is None or self._process.stderr is None:
+            return
+        try:
+            while True:
+                line = await self._process.stderr.readline()
+                if not line:
+                    break
+        except Exception:
+            pass
 
     async def _read_stdout(self) -> None:
         while self._process and self._process.stdout and not self._process.stdout.at_eof():
@@ -38,7 +51,7 @@ class StdioTransport(MCPTransport):
             try:
                 msg = json.loads(line)
             except json.JSONDecodeError:
-                await self._event_queue.put(line)
+                await self._push_event(line)
                 continue
             msg_id = msg.get("id")
             if msg_id is not None and msg_id in self._pending:
@@ -46,7 +59,13 @@ class StdioTransport(MCPTransport):
                 if not future.done():
                     future.set_result(line)
             else:
-                await self._event_queue.put(line)
+                await self._push_event(line)
+
+    async def _push_event(self, data: bytes) -> None:
+        try:
+            await asyncio.wait_for(self._event_queue.put(data), timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.QueueFull):
+            pass
 
     async def send_message(self, body: bytes) -> bytes:
         if self._process is None or self._process.stdin is None:
@@ -92,12 +111,13 @@ class StdioTransport(MCPTransport):
                 continue
 
     async def close(self) -> None:
-        if self._reader_task and not self._reader_task.done():
-            self._reader_task.cancel()
-            try:
-                await self._reader_task
-            except (asyncio.CancelledError, Exception):
-                pass
+        for task in (self._reader_task, self._stderr_task):
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
         if self._process:
             self._process.terminate()
             try:
