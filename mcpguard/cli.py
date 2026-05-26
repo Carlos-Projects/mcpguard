@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
 import typer
@@ -9,6 +11,8 @@ from rich.table import Table
 
 from mcpguard.main import AppState, ProxyConfig
 from mcpguard.proxy.server import start_proxy
+
+logger = logging.getLogger("mcpguard")
 
 app = typer.Typer(name="mcpguard", help="Runtime security proxy for MCP and A2A protocols", no_args_is_help=True)
 console = Console()
@@ -29,11 +33,14 @@ def proxy(
     denylist: list[str] = typer.Option([], "--deny", "-d", help="Denylisted tools (repeatable)"),
     rate_limit: int = typer.Option(100, "--rate-limit", "-r", help="Max requests per time window"),
     rate_window: int = typer.Option(60, "--rate-window", "-w", help="Rate limit window in seconds"),
-    api_key: str | None = typer.Option(None, "--api-key", "-k", help="API key for proxy auth"),
+    api_key: str | None = typer.Option(None, "--api-key", "-k", help="API key for proxy auth (use MCPGUARD_API_KEY env var instead for security)"),
     tls_cert: Path | None = typer.Option(None, "--tls-cert", help="TLS certificate file", exists=True),
     tls_key: Path | None = typer.Option(None, "--tls-key", help="TLS key file", exists=True),
     hot_reload: bool = typer.Option(False, "--hot-reload", help="Watch config file for changes"),
 ) -> None:
+    if api_key:
+        logger.warning("API key provided via --api-key flag is visible in process listings (ps). Use MCPGUARD_API_KEY environment variable instead.")
+
     if config_file:
         config = ProxyConfig.from_file(config_file)
         config.config_path = config_file.resolve()
@@ -52,7 +59,7 @@ def proxy(
             denylisted_tools=set(denylist),
             rate_limit=rate_limit,
             rate_window=rate_window,
-            api_key=api_key,
+            api_key=api_key or os.environ.get("MCPGUARD_API_KEY"),
             tls_cert_path=tls_cert,
             tls_key_path=tls_key,
             hot_reload=hot_reload,

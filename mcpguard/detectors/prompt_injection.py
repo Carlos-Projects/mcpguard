@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 from mcpguard.detectors.base import DetectionPlugin, registry
-from mcpguard.main import SecurityEvent
+from mcpguard.main import SecurityEvent, redact_sensitive_args
 
 SUSPICIOUS_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"ignore\s+(all\s+)?(previous|prior)\s+instructions", re.IGNORECASE),
@@ -52,7 +52,7 @@ class PromptInjectionPlugin(DetectionPlugin):
                             "tool": params.get("name", "unknown"),
                             "pattern_matched": pattern.pattern,
                             "matched_text": match.group()[:100],
-                            "arguments": arguments,
+                            "arguments": redact_sensitive_args(arguments),
                         },
                         blocked=True,
                     )
@@ -66,7 +66,7 @@ class PromptInjectionPlugin(DetectionPlugin):
                 details={
                     "tool": params.get("name", "unknown"),
                     "checks": sensitive,
-                    "arguments": arguments,
+                    "arguments": redact_sensitive_args(arguments),
                 },
                 blocked=False,
             )

@@ -82,11 +82,13 @@ def _build_proxy_base(request: Request, config: ProxyConfig) -> str:
     return f"{scheme}://{host}:{port}"
 
 
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+def _client_ip(request: Request, trusted_proxies: set[str] | None = None) -> str:
+    client_host = request.client.host if request.client else "unknown"
+    if trusted_proxies and client_host in trusted_proxies:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return client_host
 
 
 async def _handle_sse_http(
@@ -304,7 +306,7 @@ async def _handle_message(
     state.metrics["total_requests"] += 1
     inspected = inspector.inspect(msg)
     method = inspected.get("method") or ""
-    ip = _client_ip(request)
+    ip = _client_ip(request, config.trusted_proxies)
 
     plugin_event = registry.inspect_request(msg)
     if plugin_event:
@@ -467,12 +469,28 @@ class _AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if self.api_key:
             path = request.url.path.rstrip("/")
-            if not any(path.startswith(p) for p in _UNPROTECTED_PATHS):
+            if path.startswith("/metrics"):
+                auth = request.headers.get("Authorization", "")
+                qp_key = request.query_params.get("api_key", "")
+                expected_bearer = f"Bearer {self.api_key}"
+                if not hmac.compare_digest(auth, expected_bearer) and not hmac.compare_digest(auth, self.api_key) and not hmac.compare_digest(qp_key, self.api_key):
+                    return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            elif not any(path.startswith(p) for p in _UNPROTECTED_PATHS):
                 auth = request.headers.get("Authorization", "")
                 expected_bearer = f"Bearer {self.api_key}"
                 if not hmac.compare_digest(auth, expected_bearer) and not hmac.compare_digest(auth, self.api_key):
                     return JSONResponse({"error": "Unauthorized"}, status_code=401)
         return await call_next(request)
+
+
+class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
 
 
 def _app_factory(state: AppState) -> Starlette:
@@ -531,6 +549,13 @@ def _app_factory(state: AppState) -> Starlette:
         )
 
     async def ws_route(ws: WebSocket) -> None:
+        if config.api_key:
+            auth = ws.headers.get("Authorization", "")
+            qp_key = ws.query_params.get("api_key", "")
+            expected_bearer = f"Bearer {config.api_key}"
+            if not hmac.compare_digest(auth, expected_bearer) and not hmac.compare_digest(auth, config.api_key) and not hmac.compare_digest(qp_key, config.api_key):
+                await ws.close(code=4001, reason="Unauthorized")
+                return
         await _handle_ws(
             state, config, inspector, rule_engine, anomaly_detector,
             tool_cache, circuit_breaker, ws,
@@ -548,7 +573,10 @@ def _app_factory(state: AppState) -> Starlette:
     ]
     routes.extend(dashboard_routes(state))
 
-    middleware = [Middleware(_AuthMiddleware, api_key=config.api_key)]
+    middleware = [
+        Middleware(_AuthMiddleware, api_key=config.api_key),
+        Middleware(_SecurityHeadersMiddleware),
+    ]
     return Starlette(routes=routes, middleware=middleware, lifespan=lifespan)
 
 

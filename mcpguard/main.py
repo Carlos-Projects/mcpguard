@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import logging.handlers
+import os
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +32,21 @@ class SecurityEvent:
             "timestamp": self.timestamp.isoformat(),
             "blocked": self.blocked,
         }
+
+
+_SENSITIVE_KEYS = {"password", "token", "secret", "api_key", "authorization", "passwd", "credential", "auth", "api-key", "apikey"}
+
+
+def redact_sensitive_args(args: dict) -> dict:
+    if not isinstance(args, dict):
+        return args
+    redacted: dict[str, Any] = {}
+    for k, v in args.items():
+        if any(s in k.lower() for s in _SENSITIVE_KEYS):
+            redacted[k] = "***REDACTED***"
+        else:
+            redacted[k] = v
+    return redacted
 
 
 @dataclass
@@ -59,6 +78,13 @@ class ProxyConfig:
     mcpscop_url: str = ""
     mcpscop_api_key: str = ""
     max_body_size: int = 10 * 1024 * 1024
+    trusted_proxies: set[str] = field(default_factory=set)
+
+    def __post_init__(self) -> None:
+        if not self.api_key:
+            env_key = os.environ.get("MCPGUARD_API_KEY")
+            if env_key:
+                self.api_key = env_key
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -121,6 +147,7 @@ class ProxyConfig:
             mcpscop_url=data.get("mcpscop_url", ""),
             mcpscop_api_key=data.get("mcpscop_api_key", ""),
             max_body_size=data.get("max_body_size", 10 * 1024 * 1024),
+            trusted_proxies=set(data.get("trusted_proxies", [])),
         )
 
     @classmethod
@@ -141,7 +168,7 @@ class ProxyConfig:
 class AppState:
     def __init__(self, config: ProxyConfig | None = None) -> None:
         self.config = config or ProxyConfig()
-        self.events: list[SecurityEvent] = []
+        self.events: deque[SecurityEvent] = deque(maxlen=10000)
         self._start_time: datetime = datetime.now(timezone.utc)
         self._metrics_lock = asyncio.Lock()
         self.metrics: dict[str, Any] = {
@@ -156,6 +183,20 @@ class AppState:
             "tool_calls": {},
         }
         self.config.log_dir.mkdir(parents=True, exist_ok=True)
+        self._setup_audit_logger()
+
+    def _setup_audit_logger(self) -> None:
+        self._audit_logger = logging.getLogger("mcpguard.audit")
+        self._audit_logger.setLevel(logging.INFO)
+        self._audit_logger.propagate = False
+        self._audit_logger.handlers.clear()
+        handler = logging.handlers.RotatingFileHandler(
+            str(self.config.log_dir / "audit.jsonl"),
+            maxBytes=100 * 1024 * 1024,
+            backupCount=5,
+        )
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        self._audit_logger.addHandler(handler)
 
     @property
     def uptime(self) -> int:
@@ -171,13 +212,10 @@ class AppState:
 
     def log_event(self, event: SecurityEvent) -> None:
         self.events.append(event)
-        log_file = self.config.log_dir / f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.jsonl"
         try:
-            with open(log_file, "a") as f:
-                f.write(json.dumps(event.to_dict()) + "\n")
-        except OSError as e:
-            import logging
-            logging.getLogger("mcpguard").warning("Failed to write log: %s", e)
+            self._audit_logger.info(json.dumps(event.to_dict()))
+        except Exception as e:
+            logging.getLogger("mcpguard").warning("Failed to write audit log: %s", e)
         if self.config.mcpscop_url:
             try:
                 import asyncio
@@ -192,7 +230,7 @@ class AppState:
 
     def get_events_since(self, since: datetime | None = None) -> list[SecurityEvent]:
         if since is None:
-            return self.events[-100:]
+            return list(self.events)[-100:]
         return [e for e in self.events if e.timestamp > since]
 
     def reload_config(self, data: dict[str, Any]) -> None:

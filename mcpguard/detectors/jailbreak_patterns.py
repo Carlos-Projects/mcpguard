@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 from mcpguard.detectors.base import DetectionPlugin, registry
-from mcpguard.main import SecurityEvent
+from mcpguard.main import SecurityEvent, redact_sensitive_args
 
 JAILBREAK_PATTERNS: list[re.Pattern[str]] = [
     # GODMODE activation
@@ -70,7 +70,7 @@ class JailbreakPatternsPlugin(DetectionPlugin):
                             "tool": params.get("name", "unknown"),
                             "pattern_matched": pattern.pattern,
                             "matched_text": match.group()[:120],
-                            "arguments": arguments,
+                            "arguments": redact_sensitive_args(arguments),
                         },
                         blocked=True,
                     )
