@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
@@ -81,7 +82,7 @@ def _shannon_entropy(data: str) -> float:
     for c in data:
         freq[ord(c)] = freq.get(ord(c), 0) + 1
     length = len(data)
-    return -sum((count / length) * (count / length).bit_length() for count in freq.values())
+    return -sum((count / length) * math.log2(count / length) for count in freq.values() if count > 0)
 
 
 class StegoDetectorPlugin(DetectionPlugin):
@@ -283,8 +284,6 @@ class StegoDetectorPlugin(DetectionPlugin):
         if len(s) < 20:
             return True
         alpha = sum(1 for c in s if c.isalpha())
-        digit = sum(1 for c in s if c.isdigit())
-        other = len(s) - alpha - digit
         return alpha / len(s) > 0.7 if len(s) > 0 else True
 
     @staticmethod
