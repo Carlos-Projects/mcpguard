@@ -55,7 +55,7 @@ class StdioTransport(MCPTransport):
                 decoded = line.decode("utf-8", errors="replace").rstrip()
                 self._stderr_lines.append(decoded)
                 if len(self._stderr_lines) > self._stderr_max:
-                    self._stderr_lines = self._stderr_lines[-self._stderr_max:]
+                    self._stderr_lines = self._stderr_lines[-self._stderr_max :]
                 logger.debug("Subprocess stderr: %s", decoded)
         except Exception as e:
             logger.warning("Stderr reader error: %s", e, exc_info=True)
@@ -133,11 +133,17 @@ class StdioTransport(MCPTransport):
                 except (asyncio.CancelledError, Exception) as e:
                     logger.debug("Task cancelled: %s", e)
         if self._process:
-            self._process.terminate()
+            try:
+                self._process.terminate()
+            except ProcessLookupError:
+                pass
             try:
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
             except asyncio.TimeoutError:
-                self._process.kill()
+                try:
+                    self._process.kill()
+                except ProcessLookupError:
+                    pass
                 await self._process.wait()
         for future in self._pending.values():
             if not future.done():
