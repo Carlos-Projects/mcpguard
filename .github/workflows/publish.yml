@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install build
-      - run: python -m build
+      - run: rm -rf dist/ && python -m build
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_TOKEN }}
