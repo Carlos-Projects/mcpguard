@@ -1,0 +1,37 @@
+name: Integration Test
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: mcpguard
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Carlos-Projects/mcpscope
+          path: mcpscope
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install MCPGuard
+        working-directory: ./mcpguard
+        run: pip install -e ".[dev]"
+
+      - name: Install MCPscop
+        working-directory: ./mcpscope
+        run: pip install -e .
+
+      - name: Run integration test
+        working-directory: ./mcpguard
+        run: python scripts/integration_test.py
