@@ -1,4 +1,4 @@
-# MCPGuard
+# MCPGuard 🛡️
 
 [![CI](https://github.com/Carlos-Projects/mcpguard/actions/workflows/ci.yml/badge.svg)](https://github.com/Carlos-Projects/mcpguard/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/Carlos-Projects/mcpguard/branch/main/graph/badge.svg)](https://codecov.io/gh/Carlos-Projects/mcpguard)
@@ -6,9 +6,27 @@
 [![PyPI](https://img.shields.io/pypi/v/mcpguard-proxy.svg)](https://pypi.org/project/mcpguard-proxy/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Runtime security proxy for the **Model Context Protocol (MCP)** and **Agent-to-Agent (A2A)** protocols.
+**Runtime security proxy for the Model Context Protocol (MCP) and Agent-to-Agent (A2A) protocols.**
 
 MCPGuard sits between MCP clients and servers, inspecting every JSON-RPC message in real time to detect and block security threats. Supports **HTTP SSE**, **stdio**, and **WebSocket** transport modes.
+
+---
+
+## What makes MCPGuard unique
+
+| Capability | MCPGuard | Raw proxy | Custom middleware |
+|---|---|---|---|
+| **Prompt injection detection** | ✅ 14 regex patterns | ❌ | Manual |
+| **Tool poisoning detection** | ✅ flags suspicious `tools/list` | ❌ | ❌ |
+| **SSRF protection** | ✅ redirect blocking + scheme validation | ❌ | Manual |
+| **Rate limiting** | ✅ per-method + per-IP | ❌ | ❌ |
+| **Live dashboard** | ✅ HTMX at `/_mcpguard/` | ❌ | ❌ |
+| **Prometheus metrics** | ✅ `/metrics` | ❌ | ❌ |
+| **All 3 transports** | ✅ HTTP SSE + stdio + WebSocket | Partial | Manual |
+| **Hot-reload config** | ✅ | ❌ | ❌ |
+| **Circuit breaker** | ✅ auto-recovers | ❌ | ❌ |
+
+---
 
 ## Features
 
