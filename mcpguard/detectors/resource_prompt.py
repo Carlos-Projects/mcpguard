@@ -52,7 +52,7 @@ class ResourcePromptPlugin(DetectionPlugin):
                         severity="high",
                         message=f"Suspicious resource URI: {uri[:80]}",
                         details={"uri": uri, "pattern": pattern},
-                        blocked=False,
+                        blocked=True,
                     )
 
         if method == "prompts/get":
@@ -67,6 +67,22 @@ class ResourcePromptPlugin(DetectionPlugin):
                         blocked=False,
                     )
 
+        return None
+
+    def inspect_sse_event(self, event_type: str, data: dict[str, Any]) -> SecurityEvent | None:
+        params = data.get("params", {})
+        if not isinstance(params, dict):
+            return None
+        uri = params.get("uri", "")
+        for pattern in SUSPICIOUS_URI_PATTERNS:
+            if pattern in uri:
+                return SecurityEvent(
+                    event_type="suspicious_resource_sse",
+                    severity="high",
+                    message=f"Suspicious URI in SSE: {uri[:80]}",
+                    details={"uri": uri, "pattern": pattern},
+                    blocked=True,
+                )
         return None
 
 

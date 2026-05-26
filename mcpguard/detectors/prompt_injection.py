@@ -82,6 +82,24 @@ class PromptInjectionPlugin(DetectionPlugin):
                 alerts.append(f"Code block in {key}")
         return alerts
 
+    def inspect_sse_event(self, event_type: str, data: dict[str, Any]) -> SecurityEvent | None:
+        text_chunks = self._extract_text(data)
+        for chunk in text_chunks:
+            for pattern in SUSPICIOUS_PATTERNS:
+                match = pattern.search(chunk)
+                if match:
+                    return SecurityEvent(
+                        event_type="prompt_injection_sse",
+                        severity="high",
+                        message=f"Prompt injection in SSE: '{pattern.pattern[:50]}'",
+                        details={
+                            "pattern_matched": pattern.pattern,
+                            "matched_text": match.group()[:100],
+                        },
+                        blocked=True,
+                    )
+        return None
+
     def _extract_text(self, data: Any, depth: int = 0) -> list[str]:
         if depth > 5:
             return []

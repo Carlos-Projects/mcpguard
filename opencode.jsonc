@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "agent": {
+    "build": {
+      "tools": {
+        "skill": true
+      }
+    }
+  },
+
+  "command": {
+    "test": {
+      "template": "Run `python -m pytest tests/ -v` and report results.",
+      "description": "Run MCPGuard tests"
+    },
+    "lint": {
+      "template": "Run `ruff check .` and fix any issues.",
+      "description": "Lint MCPGuard code"
+    },
+    "typecheck": {
+      "template": "Run `mypy mcpguard/` and fix any type errors.",
+      "description": "Type check MCPGuard"
+    },
+    "serve": {
+      "template": "Start the MCPGuard proxy server with `python -m mcpguard proxy`.",
+      "description": "Start MCPGuard proxy"
+    }
+  }
+}

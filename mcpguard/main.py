@@ -46,7 +46,9 @@ class ProxyConfig:
     rate_limit: int = 100
     rate_window: int = 60
     block_on_injection: bool = True
-    block_on_poisoning: bool = False
+    block_on_poisoning: bool = True
+    block_on_resource_scan: bool = True
+    block_on_prompt_scan: bool = False
     api_key: str | None = None
     tls_cert_path: Path | None = None
     tls_key_path: Path | None = None
@@ -54,6 +56,9 @@ class ProxyConfig:
     config_path: Path | None = None
     max_sse_connections: int = 100
     request_timeout: float = 30.0
+    mcpscop_url: str = ""
+    mcpscop_api_key: str = ""
+    max_body_size: int = 10 * 1024 * 1024
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -103,7 +108,9 @@ class ProxyConfig:
             rate_limit=data.get("rate_limit", 100),
             rate_window=data.get("rate_window", 60),
             block_on_injection=data.get("block_on_injection", True),
-            block_on_poisoning=data.get("block_on_poisoning", False),
+            block_on_poisoning=data.get("block_on_poisoning", True),
+            block_on_resource_scan=data.get("block_on_resource_scan", True),
+            block_on_prompt_scan=data.get("block_on_prompt_scan", False),
             api_key=data.get("api_key"),
             tls_cert_path=Path(data["tls_cert_path"]) if data.get("tls_cert_path") else None,
             tls_key_path=Path(data["tls_key_path"]) if data.get("tls_key_path") else None,
@@ -111,6 +118,9 @@ class ProxyConfig:
             config_path=Path(data["config_path"]) if data.get("config_path") else None,
             max_sse_connections=data.get("max_sse_connections", 100),
             request_timeout=data.get("request_timeout", 30.0),
+            mcpscop_url=data.get("mcpscop_url", ""),
+            mcpscop_api_key=data.get("mcpscop_api_key", ""),
+            max_body_size=data.get("max_body_size", 10 * 1024 * 1024),
         )
 
     @classmethod
@@ -142,6 +152,7 @@ class AppState:
             "anomalies_detected": 0,
             "sse_connections": 0,
             "sse_total_connections": 0,
+            "ws_connections": 0,
             "tool_calls": {},
         }
         self.config.log_dir.mkdir(parents=True, exist_ok=True)
@@ -167,6 +178,17 @@ class AppState:
         except OSError as e:
             import logging
             logging.getLogger("mcpguard").warning("Failed to write log: %s", e)
+        if self.config.mcpscop_url:
+            try:
+                import asyncio
+
+                from mcpguard.proxy.mcpscop import forward_event
+                ev_dict = event.to_dict()
+                ev_dict["source"] = "mcpguard"
+                ev_dict["tool"] = event.details.get("tool")
+                asyncio.create_task(forward_event(ev_dict))
+            except Exception:
+                pass
 
     def get_events_since(self, since: datetime | None = None) -> list[SecurityEvent]:
         if since is None:
@@ -181,3 +203,5 @@ class AppState:
         self.config.rate_window = new_config.rate_window
         self.config.block_on_injection = new_config.block_on_injection
         self.config.block_on_poisoning = new_config.block_on_poisoning
+        self.config.block_on_resource_scan = new_config.block_on_resource_scan
+        self.config.block_on_prompt_scan = new_config.block_on_prompt_scan

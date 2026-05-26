@@ -62,7 +62,35 @@ class ToolPoisoningPlugin(DetectionPlugin):
                     "suspicious_tools": suspicious_tools,
                     "total_tools": len(tools),
                 },
-                blocked=False,
+                blocked=True,
+            )
+        return None
+
+    def inspect_sse_event(self, event_type: str, data: dict[str, Any]) -> SecurityEvent | None:
+        result = data.get("result", {})
+        tools = result.get("tools", []) if isinstance(result, dict) else []
+        if not tools:
+            return None
+        suspicious_tools: list[dict[str, Any]] = []
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            name = tool.get("name", "")
+            description = tool.get("description", "")
+            score = self._score_tool(name, description)
+            if score > 0:
+                suspicious_tools.append({"name": name, "score": score})
+        if suspicious_tools:
+            top = max(suspicious_tools, key=lambda x: x["score"])
+            return SecurityEvent(
+                event_type="tool_poisoning_sse",
+                severity="high" if top["score"] >= 3 else "medium",
+                message=f"Suspicious tool in SSE: '{top['name']}' (score: {top['score']})",
+                details={
+                    "suspicious_tools": suspicious_tools,
+                    "total_tools": len(tools),
+                },
+                blocked=True,
             )
         return None
 

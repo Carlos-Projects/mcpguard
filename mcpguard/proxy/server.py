@@ -16,10 +16,13 @@ from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
-from starlette.routing import Route
+from starlette.routing import Route, WebSocketRoute
+from starlette.websockets import WebSocket
 
+import mcpguard.detectors.jailbreak_patterns  # noqa: F401
 import mcpguard.detectors.prompt_injection  # noqa: F401
 import mcpguard.detectors.resource_prompt  # noqa: F401
+import mcpguard.detectors.stego_detector  # noqa: F401
 import mcpguard.detectors.tool_poisoning  # noqa: F401
 from mcpguard.detectors.anomalies import AnomalyDetector
 from mcpguard.detectors.base import registry
@@ -32,11 +35,12 @@ from mcpguard.proxy.rules import RuleEngine
 from mcpguard.proxy.session import SessionManager
 from mcpguard.transport.http import HTTPTransport
 from mcpguard.transport.stdio import StdioTransport
+from mcpguard.transport.websocket import WebSocketTransport
 
 logger = logging.getLogger("mcpguard")
 
 PROXY_VERSION = _pkg_version("mcpguard-proxy")
-MAX_BODY_SIZE = 10 * 1024 * 1024
+
 
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -111,6 +115,15 @@ async def _handle_sse_http(
                 decoded = raw.decode("utf-8", errors="replace").rstrip("\n")
                 if decoded.startswith("data: "):
                     data_val = decoded[6:]
+                    try:
+                        sse_data = json.loads(data_val)
+                        for plugin in registry.plugins:
+                            ev = plugin.inspect_sse_event("message", sse_data)
+                            if ev:
+                                await state.inc_metric("injections_detected")
+                                state.log_event(ev)
+                    except json.JSONDecodeError:
+                        pass
                     if data_val.startswith("/"):
                         decoded = f"data: {proxy_base}{data_val}"
                     elif config.target_url.rstrip("/") in data_val:
@@ -184,6 +197,69 @@ async def _handle_sse_stdio(
     )
 
 
+async def _handle_ws(
+    state: AppState, config: ProxyConfig, inspector: MessageInspector,
+    rule_engine: RuleEngine, anomaly_detector: AnomalyDetector,
+    tool_cache: ToolCache, circuit_breaker: CircuitBreaker, ws: WebSocket,
+) -> None:
+    await ws.accept()
+    transport = WebSocketTransport(target_url=config.target_url)
+    await transport.accept_ws(ws)
+    await state.inc_metric("ws_connections")
+    state.log_event(SecurityEvent(
+        event_type="ws_connect", severity="info",
+        message="WebSocket connection established",
+        details={"mode": "websocket", "target": config.target_url},
+    ))
+    try:
+        while True:
+            data = await ws.receive_text()
+            body_bytes = data.encode("utf-8")
+            if len(body_bytes) > config.max_body_size:
+                await ws.send_text(json.dumps({"error": "Request body too large"}))
+                continue
+            try:
+                msg = json.loads(data)
+            except json.JSONDecodeError:
+                await ws.send_text(json.dumps({"error": "Invalid JSON"}))
+                continue
+            state.metrics["total_requests"] += 1
+            inspected = inspector.inspect(msg)
+            method = inspected.get("method") or ""
+            plugin_event = registry.inspect_request(msg)
+            if plugin_event:
+                state.metrics["injections_detected"] += 1
+                state.log_event(plugin_event)
+                if plugin_event.blocked:
+                    await ws.send_text(json.dumps({"error": "Blocked", "detail": plugin_event.message}))
+                    continue
+            if not rule_engine.is_allowed(method):
+                state.metrics["blocked_requests"] += 1
+                await ws.send_text(json.dumps({"error": "Blocked", "detail": f"Method not allowed: {method}"}))
+                continue
+            anomaly_detector.record(method)
+            try:
+                resp_bytes = await transport.send_message(body_bytes)
+                resp_str = resp_bytes.decode("utf-8", errors="replace")
+                try:
+                    resp_json = json.loads(resp_str)
+                except json.JSONDecodeError:
+                    resp_json = {}
+                blocked_resp = _inspect_response(method, resp_json, tool_cache, state, config)
+                if blocked_resp:
+                    await ws.send_text(json.dumps({"error": "Blocked"}))
+                    continue
+                await ws.send_text(resp_str)
+            except Exception as e:
+                logger.warning("WebSocket proxy error: %s", e, exc_info=True)
+                await ws.send_text(json.dumps({"error": "Upstream error", "detail": str(e)}))
+    except Exception as e:
+        logger.warning("WebSocket connection error: %s", e, exc_info=True)
+    finally:
+        await state.dec_metric("ws_connections")
+        await transport.close()
+
+
 def _inspect_response(
     method: str, resp_json: dict, tool_cache: ToolCache,
     state: AppState, config: ProxyConfig,
@@ -192,7 +268,7 @@ def _inspect_response(
     if response_event:
         state.metrics["poisoning_detected"] += 1
         state.log_event(response_event)
-        if config.block_on_poisoning:
+        if response_event.blocked and config.block_on_poisoning:
             state.metrics["blocked_requests"] += 1
             return JSONResponse({"error": "Blocked", "detail": response_event.message}, status_code=403)
     if method == "tools/list":
@@ -209,7 +285,7 @@ async def _handle_message(
     tool_cache: ToolCache, circuit_breaker: CircuitBreaker, request: Request,
 ) -> Response:
     body_bytes = await request.body()
-    if len(body_bytes) > MAX_BODY_SIZE:
+    if len(body_bytes) > config.max_body_size:
         return JSONResponse({"error": "Request body too large"}, status_code=413)
 
     body_str = body_bytes.decode("utf-8", errors="replace")
@@ -234,7 +310,15 @@ async def _handle_message(
     if plugin_event:
         state.metrics["injections_detected"] += 1
         state.log_event(plugin_event)
-        if plugin_event.blocked and config.block_on_injection:
+        if not plugin_event.blocked:
+            pass
+        elif plugin_event.event_type == "prompt_injection" and config.block_on_injection:
+            return JSONResponse({"error": "Blocked", "detail": plugin_event.message}, status_code=403)
+        elif plugin_event.event_type == "suspicious_resource" and config.block_on_resource_scan:
+            return JSONResponse({"error": "Blocked", "detail": plugin_event.message}, status_code=403)
+        elif plugin_event.event_type == "suspicious_prompt" and config.block_on_prompt_scan:
+            return JSONResponse({"error": "Blocked", "detail": plugin_event.message}, status_code=403)
+        elif plugin_event.blocked:
             return JSONResponse({"error": "Blocked", "detail": plugin_event.message}, status_code=403)
 
     if not rule_engine.is_allowed(method):
@@ -406,7 +490,14 @@ def _app_factory(state: AppState) -> Starlette:
         if transport_http:
             await transport_http.connect()
         await session_manager.start_cleanup()
+        from mcpguard.proxy.mcpscop import get_forwarder
+        await get_forwarder(
+            target_url=config.mcpscop_url,
+            api_key=config.mcpscop_api_key,
+        )
         yield
+        from mcpguard.proxy.mcpscop import shutdown_forwarder
+        await shutdown_forwarder()
         await session_manager.stop_cleanup()
         await session_manager.close_all()
         if transport_http:
@@ -439,6 +530,12 @@ def _app_factory(state: AppState) -> Starlette:
             headers={"Content-Type": "text/plain; charset=utf-8"},
         )
 
+    async def ws_route(ws: WebSocket) -> None:
+        await _handle_ws(
+            state, config, inspector, rule_engine, anomaly_detector,
+            tool_cache, circuit_breaker, ws,
+        )
+
     from mcpguard.dashboard.app import dashboard_routes
 
     routes = [
@@ -447,6 +544,7 @@ def _app_factory(state: AppState) -> Starlette:
         Route("/health", health_route, methods=["GET"]),
         Route("/health/ready", health_ready_route, methods=["GET"]),
         Route("/metrics", metrics_route, methods=["GET"]),
+        WebSocketRoute("/ws", ws_route),
     ]
     routes.extend(dashboard_routes(state))
 
