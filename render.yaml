@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: mcpguard
+    env: docker
+    repo: https://github.com/Carlos-Projects/mcpguard
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerCommand: mcpguard proxy --target http://localhost:8000 --port 8080
+    envVars:
+      - key: MCPGUARD_API_KEY
+        value: demo-key
+    healthCheckPath: /health
+    numInstances: 1
