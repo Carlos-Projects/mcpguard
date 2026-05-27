@@ -214,6 +214,14 @@ MCPGuard is a **runtime guard** — it complements:
 - Auth middleware, TLS support, rate limiting, allow/deny lists
 - Docker support, CI/CD, PyPI publishing
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+
+## Security
+
+Found a vulnerability? See [SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT
