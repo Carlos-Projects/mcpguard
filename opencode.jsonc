@@ -9,6 +9,12 @@
     }
   },
 
+  "instructions": [
+    "AGENTS.md",
+    "HARNESS.yml",
+    "progress/current.md"
+  ],
+
   "command": {
     "test": {
       "template": "Run `python -m pytest tests/ -v` and report results.",

@@ -1,0 +1,29 @@
+apiVersion: governance.carlos/v1
+name: default-project-harness-policy
+default_action: allow
+
+rules:
+  - name: block-secret-exposure
+    condition: "action.type in ['print_secret', 'commit_secret', 'log_secret']"
+    action: deny
+    description: "Secrets must never be printed, committed, or copied into logs."
+
+  - name: require-approval-for-destructive
+    condition: "action.type in ['delete', 'drop', 'truncate', 'reset', 'force_push']"
+    action: require_approval
+    description: "Destructive operations require explicit human approval."
+
+  - name: require-approval-for-production
+    condition: "action.environment == 'production' and action.type in ['deploy', 'migrate', 'publish']"
+    action: require_approval
+    description: "Production deploys, migrations, and public package publishes require approval."
+
+  - name: constrain-context-loading
+    condition: "action.type == 'bulk_read' and action.estimated_lines > 1000"
+    action: deny
+    description: "Use targeted search and harness files before bulk-reading large code or notes."
+
+  - name: require-evidence-for-done
+    condition: "action.type == 'complete_task' and evidence.verification == ''"
+    action: require_approval
+    description: "A task cannot be closed without tests/checks or an explicit reason."

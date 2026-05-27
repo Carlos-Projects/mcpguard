@@ -1,0 +1,90 @@
+schema: carlos-harness/v1
+project:
+  name: MCPGuard
+  owner: Carlos Rocha
+  status: active
+  domain: mcp-security
+  summary: Runtime security proxy for MCP and A2A protocols. Intercepts JSON-RPC traffic, detects prompt injection/tool poisoning/resource abuse, enforces policy, rate limits, and emits audit/metrics.
+
+context_budget:
+  startup_files:
+    - AGENTS.md
+    - HARNESS.yml
+    - progress/current.md
+    - docs/architecture.md
+    - docs/verification.md
+  max_startup_lines: 500
+  prefer_search_over_bulk_read: true
+
+agent_adapters:
+  codex:
+    entrypoint: AGENTS.md
+    progress_file: progress/current.md
+  opencode:
+    config_file: opencode.jsonc
+    instructions:
+      - AGENTS.md
+      - HARNESS.yml
+      - progress/current.md
+    use_skills_for_execution_not_memory: true
+  claude:
+    entrypoint: AGENTS.md
+  cursor:
+    entrypoint: AGENTS.md
+
+commands:
+  setup:
+    - "python3 -m venv .venv && source .venv/bin/activate && pip install -e '.[dev]'"
+  test:
+    - "python3 -m pytest tests/ -v"
+  lint:
+    - "ruff check ."
+  typecheck:
+    - "mypy mcpguard/"
+  build:
+    - "python3 -m build"
+  run:
+    - "mcpguard proxy --target http://localhost:8000 --port 8080"
+  security:
+    - "verify no API keys are passed in committed configs or shell examples"
+    - "verify auth is enabled before exposing dashboards or proxy endpoints"
+    - "verify policy defaults fail closed for suspicious MCP traffic"
+
+governance:
+  policy_file: policies/default.yaml
+  audit_log: progress/audit.jsonl
+  token_budget:
+    max_tokens_per_session: 120000
+    max_tokens_per_task: 30000
+  approval_required_for:
+    - secrets
+    - production_deploy
+    - database_migration
+    - destructive_command
+    - public_publish
+
+evidence:
+  required_artifacts:
+    - progress/current.md
+    - progress/history.md
+  optional_artifacts:
+    - reports/security.md
+    - reports/test-results.md
+    - reports/redteam.md
+
+integrations:
+  obsidian_notes:
+    - "/Users/carlosrocha/Documents/Obsidian Vault/03_Projects/MCPGuard/MCPGuard - Resumen Completo.md"
+    - "/Users/carlosrocha/Documents/Obsidian Vault/MCP Security Workspace - Resumen Completo.md"
+  github_repo: "Carlos-Projects/mcpguard"
+  website: ""
+  package: ""
+
+agt_alignment:
+  microsoft_pattern: "MCP Security Gateway"
+  local_role: "practical MCP/A2A gateway implementation"
+  next_integrations:
+    - "Map features against AGT MCP Security Gateway spec"
+    - "Emit canonical mcp-taxonomy audit events"
+    - "Add schema drift detection matrix if missing"
+    - "Forward normalized findings to MCPscop and ThreatLens"
