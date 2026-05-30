@@ -1,4 +1,27 @@
-# Contributing
+# Contributing to MCPGuard
+
+👋 **Welcome, and thank you for considering contributing to MCPGuard!**
+
+Every contribution — whether it's a bug fix, new feature, documentation improvement, or just asking a good question — helps make AI agent security stronger for everyone. We're thrilled to have you here.
+
+## First Time Contributor?
+
+No worries! We all start somewhere. Here are some great ways to begin:
+
+- Look for issues labeled `good first issue` or `help wanted`
+- Improve our documentation or README
+- Add more tests to increase coverage
+- Ask questions in GitHub Discussions — there are no silly questions
+
+We maintain a welcoming, inclusive community. If you ever feel stuck, just ask.
+
+## Need Help?
+
+If you have questions or run into trouble:
+
+- Open a [GitHub Issue](https://github.com/Carlos-Projects/mcpguard/issues)
+- Check existing issues to see if someone else had the same question
+- Be as descriptive as possible — include your environment, steps to reproduce, and what you expected to happen
 
 ## Development Setup
 
@@ -39,3 +62,7 @@ Before submitting a PR, ensure:
 2. Keep PRs focused on a single change
 3. Reference related issues
 4. Squash commits before merging
+
+---
+
+💡 This project is governed by a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold its principles.
