@@ -5,6 +5,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://pypi.org/project/mcpguard-proxy/)
 [![PyPI](https://img.shields.io/pypi/v/mcpguard-proxy.svg)](https://pypi.org/project/mcpguard-proxy/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Star History](https://img.shields.io/badge/Star-History-blue?style=social)](https://api.star-history.com/svg?repos=Carlos-Projects/mcpguard&type=Date)
 
 **Runtime security proxy for the Model Context Protocol (MCP) and Agent-to-Agent (A2A) protocols.**
 
