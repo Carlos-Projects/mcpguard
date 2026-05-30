@@ -107,11 +107,11 @@ class StdioTransport(MCPTransport):
             raise TimeoutError(f"Timeout waiting for response to id={msg_id}")
 
     async def _send_raw(self, body: bytes) -> bytes:
-        if self._process is None or self._process.stdin is None or self._process.stdout is None:
+        if self._process is None or self._process.stdin is None:
             raise RuntimeError("Transport not connected")
         self._process.stdin.write(body + b"\n")
         await self._process.stdin.drain()
-        line = await asyncio.wait_for(self._process.stdout.readline(), timeout=30.0)
+        line = await asyncio.wait_for(self._event_queue.get(), timeout=30.0)
         return line.rstrip(b"\n\r")
 
     async def event_stream(self) -> AsyncGenerator[bytes, None]:
