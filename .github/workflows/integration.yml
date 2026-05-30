@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Carlos-Projects/mcpscope
-          path: mcpscope
+          path: mcpguard/MCPscop/mcpscope
 
       - uses: actions/setup-python@v5
         with:
