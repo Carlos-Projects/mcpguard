@@ -29,7 +29,7 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Install MCPscop
-        working-directory: ./mcpscope
+        working-directory: ./mcpguard/MCPscop/mcpscope
         run: pip install -e .
 
       - name: Run integration test
