@@ -7,16 +7,18 @@ from mcpguard.transport.stdio import StdioTransport
 
 class TestStdioTransport:
     def test_empty_command_validation(self):
+        import asyncio
+
         t = StdioTransport(command=[])
         with pytest.raises(ValueError, match="No command configured"):
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(t.connect())
+            asyncio.run(t.connect())
 
     def test_nonexistent_command(self):
+        import asyncio
+
         t = StdioTransport(command=["nonexistent_command_xyz"])
         with pytest.raises(FileNotFoundError, match="Command not found"):
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(t.connect())
+            asyncio.run(t.connect())
 
     @pytest.mark.asyncio
     async def test_valid_command_connects(self):
