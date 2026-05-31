@@ -37,7 +37,7 @@ jobs:
       - run: python -m pytest tests/ -v --cov=mcpguard --cov-report=xml --ignore=tests/test_integration_stdio.py --ignore=tests/test_integration_http.py -x
       - name: Upload coverage
         if: matrix.python-version == '3.13'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           file: coverage.xml
           fail_ci_if_error: false
