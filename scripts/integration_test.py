@@ -139,8 +139,6 @@ async def main() -> int:
     print("\n[2] Starting MCPGuard...")
     mcpguard = subprocess.Popen(
         [
-            sys.executable,
-            "-m",
             "mcpguard",
             "proxy",
             "--config",
