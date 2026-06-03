@@ -110,7 +110,7 @@ async def main() -> int:
         "block_on_resource_scan": True,
         "block_on_prompt_scan": True,
     }
-    mcpguard_cfg_path = tmpdir / "mcpguard.yaml"
+    mcpguard_cfg_path = tmpdir / "mcpguard.json"
     mcpguard_cfg_path.write_text(json.dumps(mcpguard_cfg))
 
     os.environ["HOME"] = str(tmpdir)
@@ -152,7 +152,8 @@ async def main() -> int:
     )
     mcpguard_url = f"http://127.0.0.1:{MCPGUARD_PORT}"
     if not wait_for_http(f"{mcpguard_url}/health"):
-        print("[ERROR] MCPGuard failed to start")
+        stderr = mcpguard.stderr.read().decode() if mcpguard.stderr else ""
+        print(f"[ERROR] MCPGuard failed to start\n  stderr: {stderr[:500]}")
         cleanup(mcpscop, mcpguard)
         return 1
     print(f"  MCPGuard at {mcpguard_url}")
