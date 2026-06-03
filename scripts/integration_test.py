@@ -212,8 +212,8 @@ async def main() -> int:
         event_types = {e.get("event_type") for e in events}
         log("Events contain 'prompt_injection'", "prompt_injection" in event_types)
         log(
-            "Events contain 'suspicious_prompt' or 'tool_blocked'",
-            "suspicious_prompt" in event_types or "tool_blocked" in event_types,
+            "Events contain 'stego_detection' or 'tool_poisoning'",
+            "stego_detection" in event_types or "tool_poisoning" in event_types,
         )
     else:
         log(f"MCPscop events API returned {r.status_code}", False)
