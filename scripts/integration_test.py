@@ -17,7 +17,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
 MCPSCOP_DIR = HERE / "MCPscop" / "mcpscope"
-MCPGUARD_DIR = HERE / "MCPGuard"
+MCPGUARD_DIR = HERE
 
 MCPSCOP_PORT = 9199
 MCPGUARD_PORT = 9189
