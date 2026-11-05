@@ -1,11 +1,11 @@
 # Current State
 
 Status: active
-Last updated: 2026-05-26
+Last updated: 2026-11-05
 
 ## Current Goal
 
-Install a portable Codex/OpenCode harness and align MCPGuard with the Microsoft AGT MCP Security Gateway pattern.
+Restore MCP Python SDK v2 compatibility while preserving the existing HTTP SSE and stdio proxy contracts.
 
 ## Known Good Commands
 
@@ -20,7 +20,8 @@ Install a portable Codex/OpenCode harness and align MCPGuard with the Microsoft 
 - MCP proxy and dashboard surfaces must fail closed when auth/policy is uncertain.
 - Examples must not encourage passing secrets through committed configs.
 - Findings should normalize to mcp-taxonomy so MCPscop, ThreatLens, and AgentForensics can consume them.
+- The legacy SSE transport remains supported for compatibility, but new integrations should prefer streamable HTTP.
 
 ## Next Step
 
-- Create an AGT MCP Security Gateway conformance map for MCPGuard.
+- Add streamable HTTP proxy coverage, then create an AGT MCP Security Gateway conformance map for MCPGuard.

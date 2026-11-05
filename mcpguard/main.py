@@ -224,9 +224,14 @@ class AppState:
                 ev_dict = event.to_dict()
                 ev_dict["source"] = "mcpguard"
                 ev_dict["tool"] = event.details.get("tool")
-                asyncio.create_task(forward_event(ev_dict))
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # Audit logging is also used from synchronous contexts. Do not
+                # create a coroutine unless an event loop can schedule it.
+                return
             except Exception:
-                pass
+                return
+            loop.create_task(forward_event(ev_dict))
 
     def get_events_since(self, since: datetime | None = None) -> list[SecurityEvent]:
         if since is None:
