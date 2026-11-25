@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
-server = FastMCP("MCPTestServer", port=8000)
+server = MCPServer("MCPTestServer")
 
 
 @server.tool()
@@ -34,8 +34,10 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--transport", choices=["stdio", "sse"], default="sse")
     args = parser.parse_args()
-    server.settings.port = args.port
-    server.run(transport=args.transport)
+    if args.transport == "stdio":
+        server.run(transport="stdio")
+    else:
+        server.run(transport="sse", host="127.0.0.1", port=args.port)
 
 
 if __name__ == "__main__":
